@@ -1,9 +1,10 @@
 import { Auth as SupabaseAuth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useEffect } from "react";
-import { Radio } from "lucide-react";
+import { Radio, Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -32,6 +33,16 @@ const Auth = () => {
         </div>
         
         <div className="bg-card border border-border rounded-lg p-8 shadow-lg">
+          <Alert className="mb-4 bg-primary/5 border-primary/20">
+            <Info className="w-4 h-4" />
+            <AlertDescription>
+              Não tem suas credenciais?{" "}
+              <Link to="/instructions" className="text-primary hover:underline font-semibold">
+                Veja como obter aqui →
+              </Link>
+            </AlertDescription>
+          </Alert>
+          
           <SupabaseAuth
             supabaseClient={supabase}
             appearance={{

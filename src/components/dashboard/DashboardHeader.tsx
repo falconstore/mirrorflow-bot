@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Radio, LogOut } from "lucide-react";
+import { Radio, LogOut, BarChart3, HelpCircle, LayoutDashboard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
 export const DashboardHeader = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const handleLogout = async () => {
@@ -27,10 +28,38 @@ export const DashboardHeader = () => {
           <h1 className="text-xl font-bold text-foreground">Message Mirroring</h1>
         </div>
 
-        <Button variant="ghost" size="sm" onClick={handleLogout}>
-          <LogOut className="w-4 h-4 mr-2" />
-          Sair
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant={location.pathname === "/dashboard" ? "default" : "ghost"} 
+            size="sm"
+            onClick={() => navigate("/dashboard")}
+          >
+            <LayoutDashboard className="w-4 h-4 mr-2" />
+            Dashboard
+          </Button>
+          
+          <Button 
+            variant={location.pathname === "/analytics" ? "default" : "ghost"} 
+            size="sm"
+            onClick={() => navigate("/analytics")}
+          >
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Analytics
+          </Button>
+          
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={() => navigate("/instructions")}
+          >
+            <HelpCircle className="w-5 h-5" />
+          </Button>
+
+          <Button variant="ghost" size="sm" onClick={handleLogout}>
+            <LogOut className="w-4 h-4 mr-2" />
+            Sair
+          </Button>
+        </div>
       </div>
     </header>
   );

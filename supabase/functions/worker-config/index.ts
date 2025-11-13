@@ -17,6 +17,37 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Handle POST request (save session_string)
+    if (req.method === 'POST') {
+      const body = await req.json();
+      const { config_id, session_string } = body;
+
+      if (!config_id || !session_string) {
+        return new Response(JSON.stringify({ error: 'config_id and session_string are required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Update session_string in telegram_configs
+      const { error: updateError } = await supabase
+        .from('telegram_configs')
+        .update({ session_string })
+        .eq('id', config_id);
+
+      if (updateError) {
+        return new Response(JSON.stringify({ error: updateError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, message: 'Session string saved' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Handle GET request (fetch config)
     const url = new URL(req.url);
     const configId = url.searchParams.get('config_id');
 

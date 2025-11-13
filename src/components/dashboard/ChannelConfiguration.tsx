@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ export const ChannelConfiguration = ({ configId, onConfigCreated }: ChannelConfi
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(!configId);
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
   const [copied, setCopied] = useState(false);
   
   const [apiId, setApiId] = useState("");
@@ -29,6 +30,71 @@ export const ChannelConfiguration = ({ configId, onConfigCreated }: ChannelConfi
     { id: "", name: "" }
   ]);
   const [delaySeconds, setDelaySeconds] = useState([2]);
+
+  // Load existing configuration when configId exists
+  useEffect(() => {
+    const loadConfiguration = async () => {
+      if (!configId) return;
+
+      setLoadingData(true);
+      try {
+        // Load telegram config
+        const { data: config, error: configError } = await supabase
+          .from("telegram_configs")
+          .select("*")
+          .eq("id", configId)
+          .single();
+
+        if (configError) throw configError;
+
+        // Load source channel
+        const { data: sourceChannel, error: sourceError } = await supabase
+          .from("source_channels")
+          .select("*")
+          .eq("config_id", configId)
+          .single();
+
+        if (sourceError) throw sourceError;
+
+        // Load destination channels
+        const { data: destChannels, error: destError } = await supabase
+          .from("destination_channels")
+          .select("*")
+          .eq("config_id", configId);
+
+        if (destError) throw destError;
+
+        // Populate form fields
+        setApiId(config.api_id);
+        setApiHash(config.api_hash);
+        setPhoneNumber(config.phone_number);
+        setDelaySeconds([config.delay_seconds]);
+        setSourceChannelId(sourceChannel.channel_id.toString());
+        setSourceChannelName(sourceChannel.channel_name);
+        setDestinationChannels(
+          destChannels.map(d => ({
+            id: d.channel_id.toString(),
+            name: d.channel_name
+          }))
+        );
+
+        toast({
+          title: "Configuração carregada",
+          description: "Dados carregados com sucesso. Você pode editar e salvar novamente.",
+        });
+      } catch (error: any) {
+        toast({
+          title: "Erro ao carregar configuração",
+          description: error.message,
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
+    loadConfiguration();
+  }, [configId, toast]);
 
   const handleAddDestination = () => {
     if (destinationChannels.length < 10) {
@@ -71,25 +137,47 @@ export const ChannelConfiguration = ({ configId, onConfigCreated }: ChannelConfi
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
 
-      // Create or update config
-      const { data: config, error: configError } = await supabase
-        .from("telegram_configs")
-        .upsert({
-          user_id: user.id,
-          api_id: apiId,
-          api_hash: apiHash,
-          phone_number: phoneNumber,
-          delay_seconds: delaySeconds[0],
-          status: "active",
-        })
-        .select()
-        .single();
+      let config;
+      
+      if (configId) {
+        // Update existing config
+        const { data: updatedConfig, error: configError } = await supabase
+          .from("telegram_configs")
+          .update({
+            api_id: apiId,
+            api_hash: apiHash,
+            phone_number: phoneNumber,
+            delay_seconds: delaySeconds[0],
+            status: "active",
+          })
+          .eq("id", configId)
+          .select()
+          .single();
 
-      if (configError) throw configError;
+        if (configError) throw configError;
+        config = updatedConfig;
 
-      // Delete existing channels
-      await supabase.from("source_channels").delete().eq("config_id", config.id);
-      await supabase.from("destination_channels").delete().eq("config_id", config.id);
+        // Delete existing channels for this config
+        await supabase.from("source_channels").delete().eq("config_id", configId);
+        await supabase.from("destination_channels").delete().eq("config_id", configId);
+      } else {
+        // Create new config
+        const { data: newConfig, error: configError } = await supabase
+          .from("telegram_configs")
+          .insert({
+            user_id: user.id,
+            api_id: apiId,
+            api_hash: apiHash,
+            phone_number: phoneNumber,
+            delay_seconds: delaySeconds[0],
+            status: "active",
+          })
+          .select()
+          .single();
+
+        if (configError) throw configError;
+        config = newConfig;
+      }
 
       // Create source channel
       await supabase.from("source_channels").insert({
@@ -111,8 +199,10 @@ export const ChannelConfiguration = ({ configId, onConfigCreated }: ChannelConfi
       setExpanded(false);
 
       toast({
-        title: "Configuração salva!",
-        description: "Sua configuração foi salva com sucesso. Copie o ID abaixo para usar no Worker.",
+        title: configId ? "Configuração atualizada!" : "Configuração salva!",
+        description: configId 
+          ? "Suas alterações foram salvas com sucesso." 
+          : "Sua configuração foi salva com sucesso. Copie o ID abaixo para usar no Worker.",
       });
     } catch (error: any) {
       toast({
@@ -156,6 +246,12 @@ export const ChannelConfiguration = ({ configId, onConfigCreated }: ChannelConfi
 
       {expanded && (
         <CardContent className="space-y-6">
+          {loadingData ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="ml-3 text-muted-foreground">Carregando configuração...</span>
+            </div>
+          ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
@@ -281,9 +377,10 @@ export const ChannelConfiguration = ({ configId, onConfigCreated }: ChannelConfi
               </div>
             </div>
           </div>
+          )}
 
-          <Button onClick={handleSaveConfiguration} disabled={loading} className="w-full">
-            {loading ? "Salvando..." : "Salvar Configuração"}
+          <Button onClick={handleSaveConfiguration} disabled={loading || loadingData} className="w-full">
+            {loading ? "Salvando..." : configId ? "Atualizar Configuração" : "Salvar Configuração"}
           </Button>
 
           {configId && (

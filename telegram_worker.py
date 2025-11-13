@@ -85,6 +85,27 @@ class TelegramWorker:
         except Exception as e:
             logger.error(f"❌ Erro ao reportar log: {e}")
     
+    async def save_session_string(self):
+        """Salva o session_string no banco de dados"""
+        try:
+            session_string = self.client.session.save()
+            
+            response = requests.post(
+                f"{API_ENDPOINT}/worker-config",
+                json={
+                    "config_id": CONFIG_ID,
+                    "session_string": session_string
+                },
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                logger.info("✅ Session string salva no banco de dados")
+            else:
+                logger.warning(f"⚠️  Não foi possível salvar session string: {response.text}")
+        except Exception as e:
+            logger.error(f"❌ Erro ao salvar session string: {e}")
+    
     async def start(self):
         """Inicia o worker"""
         # Buscar configuração
@@ -101,6 +122,9 @@ class TelegramWorker:
         
         await self.client.start(phone=self.config['phone_number'])
         logger.info("🚀 Worker conectado ao Telegram!")
+        
+        # Salvar session string no banco após primeiro login
+        await self.save_session_string()
         
         # Registrar event handler
         source_channel = int(self.config['source_channel_id'])

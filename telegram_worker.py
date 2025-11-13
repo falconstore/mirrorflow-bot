@@ -19,6 +19,7 @@ from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
 from dotenv import load_dotenv
 import logging
+from pathlib import Path
 
 # Configurar logging
 logging.basicConfig(
@@ -27,12 +28,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Carregar variáveis de ambiente
-load_dotenv()
+# Carregar variáveis de ambiente do diretório do script
+script_dir = Path(__file__).parent
+env_path = script_dir / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # Configurações
 API_ENDPOINT = os.getenv('API_ENDPOINT')
 CONFIG_ID = os.getenv('CONFIG_ID')
+
+# Validar que as variáveis foram carregadas
+if not API_ENDPOINT or not CONFIG_ID:
+    logger.error(f"❌ ERRO: Variáveis de ambiente não encontradas!")
+    logger.error(f"   Procurando .env em: {env_path}")
+    logger.error(f"   API_ENDPOINT: {API_ENDPOINT}")
+    logger.error(f"   CONFIG_ID: {CONFIG_ID}")
+    logger.error(f"")
+    logger.error(f"   Certifique-se que o arquivo .env existe e contém:")
+    logger.error(f"   API_ENDPOINT=https://mishbzanrtzlexgdwenp.supabase.co/functions/v1")
+    logger.error(f"   CONFIG_ID=79fb6f65-3f61-48bc-9ad0-95eda9a0fea0")
+    exit(1)
+
+logger.info(f"✅ Configurações carregadas do arquivo: {env_path}")
 
 class TelegramWorker:
     def __init__(self):

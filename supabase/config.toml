@@ -1,1 +1,7 @@
 project_id = "mishbzanrtzlexgdwenp"
+
+[functions.worker-config]
+verify_jwt = false
+
+[functions.worker-log]
+verify_jwt = false

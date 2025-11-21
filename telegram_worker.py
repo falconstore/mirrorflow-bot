@@ -133,11 +133,11 @@ class TelegramWorker:
             )
             
             if response.status_code == 200:
-                logger.debug("💓 Heartbeat enviado")
+                logger.info("💓 Heartbeat enviado com sucesso")
             else:
-                logger.warning(f"⚠️  Erro ao enviar heartbeat: {response.text}")
+                logger.error(f"❌ Erro ao enviar heartbeat (HTTP {response.status_code}): {response.text}")
         except Exception as e:
-            logger.debug(f"⚠️  Erro ao enviar heartbeat: {e}")
+            logger.error(f"❌ Erro de conexão ao enviar heartbeat: {e}")
 
     async def handle_restart_request(self):
         """Executa reinício suave do worker"""
@@ -221,14 +221,14 @@ class TelegramWorker:
                     
                     self.is_active = new_is_active
                     
-                    # Enviar heartbeat a cada 30 segundos (6 iterações de 5s)
+                    # Enviar heartbeat a cada 10 segundos (2 iterações de 5s)
                     heartbeat_counter += 1
-                    if heartbeat_counter >= 6:
+                    if heartbeat_counter >= 2:
                         await self.send_heartbeat()
                         heartbeat_counter = 0
                         
             except Exception as e:
-                logger.warning(f"⚠️  Erro ao verificar status: {e}")
+                logger.error(f"❌ Erro ao verificar status: {e}")
             
             await asyncio.sleep(5)  # Verificar a cada 5 segundos
     

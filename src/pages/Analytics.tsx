@@ -10,6 +10,9 @@ import { MessagesPerHourChart } from "@/components/analytics/MessagesPerHourChar
 import { MessageTypesChart } from "@/components/analytics/MessageTypesChart";
 import { ChannelPerformanceChart } from "@/components/analytics/ChannelPerformanceChart";
 import { WeeklyTrendChart } from "@/components/analytics/WeeklyTrendChart";
+import { ErrorAnalysisCard } from "@/components/analytics/ErrorAnalysisCard";
+import { PerformanceMetrics } from "@/components/analytics/PerformanceMetrics";
+import { ChannelHealthCard } from "@/components/analytics/ChannelHealthCard";
 
 interface Log {
   id: string;
@@ -228,6 +231,17 @@ const Analytics = () => {
               <ChannelPerformanceChart logs={logs} configId={configId} />
             </CardContent>
           </Card>
+        </div>
+
+        {/* Nova Seção: Performance e Saúde */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <PerformanceMetrics logs={logs} />
+          <ErrorAnalysisCard logs={logs} />
+        </div>
+
+        {/* Saúde dos Canais */}
+        <div className="mb-8">
+          <ChannelHealthCard logs={logs} />
         </div>
 
         {/* Gráfico de Tendência Semanal */}

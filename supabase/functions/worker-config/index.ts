@@ -17,22 +17,29 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Handle POST request (save session_string)
+    // Handle POST request (save session_string, update restart flag, heartbeat)
     if (req.method === 'POST') {
       const body = await req.json();
-      const { config_id, session_string } = body;
+      const { config_id, session_string, restart_requested, worker_heartbeat } = body;
 
-      if (!config_id || !session_string) {
-        return new Response(JSON.stringify({ error: 'config_id and session_string are required' }), {
+      if (!config_id) {
+        return new Response(JSON.stringify({ error: 'config_id is required' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      // Update session_string in telegram_configs
+      // Build update object based on what's provided
+      const updates: any = {};
+      if (session_string !== undefined) updates.session_string = session_string;
+      if (restart_requested !== undefined) updates.restart_requested = restart_requested;
+      if (worker_heartbeat !== undefined) updates.worker_last_heartbeat = new Date().toISOString();
+      if (restart_requested === false) updates.last_restart_at = new Date().toISOString();
+
+      // Update telegram_configs
       const { error: updateError } = await supabase
         .from('telegram_configs')
-        .update({ session_string })
+        .update(updates)
         .eq('id', config_id);
 
       if (updateError) {
@@ -42,7 +49,7 @@ serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ success: true, message: 'Session string saved' }), {
+      return new Response(JSON.stringify({ success: true, message: 'Config updated' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -95,6 +102,9 @@ serve(async (req) => {
       delay_seconds: config.delay_seconds,
       status: config.status,
       session_string: config.session_string,
+      restart_requested: config.restart_requested || false,
+      last_restart_at: config.last_restart_at,
+      worker_last_heartbeat: config.worker_last_heartbeat,
     };
 
     return new Response(JSON.stringify(response), {

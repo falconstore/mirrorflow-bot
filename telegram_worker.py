@@ -1,6 +1,6 @@
 """
 Message Mirroring - Python Worker for Telegram
-Versão: 1.0.0
+Versão: 2.0.0 - Com Controle Remoto Completo
 
 Este worker escuta mensagens do canal VIP e replica para os canais de destino.
 Configuração: Use o arquivo .env para definir API_ENDPOINT e CONFIG_ID.
@@ -20,6 +20,7 @@ from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
 from dotenv import load_dotenv
 import logging
 from pathlib import Path
+from datetime import datetime
 
 # Configurar logging
 logging.basicConfig(
@@ -58,6 +59,8 @@ class TelegramWorker:
         self.is_active = True
         self.last_status = 'active'
         self.is_running = False
+        self.message_count = 0
+        self.start_time = None
         
     async def fetch_config(self):
         """Busca configuração do backend Lovable"""
@@ -117,8 +120,80 @@ class TelegramWorker:
         except Exception as e:
             logger.error(f"❌ Erro ao salvar session string: {e}")
 
+    async def send_heartbeat(self):
+        """Envia heartbeat para indicar que o worker está vivo"""
+        try:
+            response = requests.post(
+                f"{API_ENDPOINT}/worker-config",
+                json={
+                    "config_id": CONFIG_ID,
+                    "worker_heartbeat": True
+                },
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                logger.debug("💓 Heartbeat enviado")
+            else:
+                logger.warning(f"⚠️  Erro ao enviar heartbeat: {response.text}")
+        except Exception as e:
+            logger.debug(f"⚠️  Erro ao enviar heartbeat: {e}")
+
+    async def handle_restart_request(self):
+        """Executa reinício suave do worker"""
+        try:
+            logger.info("🔄 Reinício solicitado remotamente...")
+            
+            # 1. Limpar o flag no banco PRIMEIRO
+            response = requests.post(
+                f"{API_ENDPOINT}/worker-config",
+                json={
+                    "config_id": CONFIG_ID,
+                    "restart_requested": False
+                },
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"❌ Erro ao limpar flag de restart: {response.text}")
+                return
+            
+            # 2. Desconectar do Telegram
+            logger.info("📡 Desconectando do Telegram...")
+            await self.client.disconnect()
+            
+            # 3. Aguardar 2 segundos
+            await asyncio.sleep(2)
+            
+            # 4. Recarregar configuração
+            logger.info("⚙️  Recarregando configuração...")
+            await self.fetch_config()
+            
+            # 5. Reconectar ao Telegram
+            logger.info("🔌 Reconectando ao Telegram...")
+            self.client = TelegramClient(
+                'session_name',
+                api_id=int(self.config['api_id']),
+                api_hash=self.config['api_hash']
+            )
+            await self.client.start(phone=self.config['phone_number'])
+            
+            # 6. Re-registrar event handler
+            source_channel = int(self.config['source_channel_id'])
+            
+            @self.client.on(events.NewMessage(chats=source_channel))
+            async def handler(event):
+                await self.handle_new_message(event)
+            
+            logger.info("✅ Worker reiniciado com sucesso!")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao reiniciar worker: {e}")
+
     async def check_status_periodically(self):
         """Verifica o status do bot periodicamente (a cada 5 segundos)"""
+        heartbeat_counter = 0
+        
         while self.is_running:
             try:
                 response = requests.get(f"{API_ENDPOINT}/worker-config?config_id={CONFIG_ID}")
@@ -126,6 +201,12 @@ class TelegramWorker:
                 if response.status_code == 200:
                     data = response.json()
                     current_status = data.get('status', 'active')
+                    restart_requested = data.get('restart_requested', False)
+                    
+                    # Verificar se restart foi solicitado
+                    if restart_requested:
+                        await self.handle_restart_request()
+                        continue
                     
                     # Atualizar flag interno
                     new_is_active = (current_status == 'active')
@@ -139,6 +220,12 @@ class TelegramWorker:
                         self.last_status = current_status
                     
                     self.is_active = new_is_active
+                    
+                    # Enviar heartbeat a cada 30 segundos (6 iterações de 5s)
+                    heartbeat_counter += 1
+                    if heartbeat_counter >= 6:
+                        await self.send_heartbeat()
+                        heartbeat_counter = 0
                         
             except Exception as e:
                 logger.warning(f"⚠️  Erro ao verificar status: {e}")
@@ -147,6 +234,8 @@ class TelegramWorker:
     
     async def start(self):
         """Inicia o worker"""
+        self.start_time = datetime.now()
+        
         # Buscar configuração
         if not await self.fetch_config():
             logger.error("❌ Não foi possível iniciar. Verifique suas credenciais.")
@@ -165,7 +254,11 @@ class TelegramWorker:
         # Salvar session string no banco após primeiro login
         await self.save_session_string()
         
+        # Enviar heartbeat inicial
+        await self.send_heartbeat()
+        
         # Iniciar verificação periódica de status em background
+        self.is_running = True
         asyncio.create_task(self.check_status_periodically())
         logger.info("🔄 Verificação periódica de status iniciada")
         
@@ -177,7 +270,6 @@ class TelegramWorker:
             await self.handle_new_message(event)
         
         logger.info(f"👂 Ouvindo mensagens do canal: {source_channel}")
-        self.is_running = True
         
         # Manter rodando
         await self.client.run_until_disconnected()
@@ -191,6 +283,7 @@ class TelegramWorker:
         
         message = event.message
         source_channel = event.chat_id
+        start_time = datetime.now()
         
         # Detectar tipo de mensagem
         if message.photo:
@@ -204,7 +297,8 @@ class TelegramWorker:
         else:
             message_type = "text"
         
-        logger.info(f"📨 Nova mensagem detectada: {message_type}")
+        self.message_count += 1
+        logger.info(f"📨 Nova mensagem detectada: {message_type} (#{self.message_count})")
         
         # Replicar para cada canal de destino
         for dest_channel_id in self.config['destination_channels']:
@@ -249,6 +343,10 @@ class TelegramWorker:
                         caption=message.text if message.text else None
                     )
                 
+                # Calcular latência
+                end_time = datetime.now()
+                latency = (end_time - start_time).total_seconds()
+                
                 # Reportar sucesso
                 await self.report_log(
                     source_channel,
@@ -257,7 +355,7 @@ class TelegramWorker:
                     "success"
                 )
                 
-                logger.info(f"✅ Replicado para: {dest_channel_id}")
+                logger.info(f"✅ Replicado para: {dest_channel_id} (latência: {latency:.2f}s)")
                 
             except Exception as e:
                 # Reportar falha
@@ -275,6 +373,14 @@ class TelegramWorker:
         self.is_running = False
         if self.client:
             await self.client.disconnect()
+        
+        # Log de estatísticas finais
+        if self.start_time:
+            uptime = datetime.now() - self.start_time
+            logger.info(f"📊 Estatísticas finais:")
+            logger.info(f"   Uptime: {uptime}")
+            logger.info(f"   Mensagens processadas: {self.message_count}")
+        
         logger.info("⏹️ Worker parado")
 
 # Executar

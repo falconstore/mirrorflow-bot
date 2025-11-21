@@ -55,6 +55,8 @@ class TelegramWorker:
     def __init__(self):
         self.client = None
         self.config = None
+        self.is_active = True
+        self.last_status = 'active'
         self.is_running = False
         
     async def fetch_config(self):
@@ -105,6 +107,32 @@ class TelegramWorker:
                 logger.warning(f"⚠️  Não foi possível salvar session string: {response.text}")
         except Exception as e:
             logger.error(f"❌ Erro ao salvar session string: {e}")
+
+    async def check_status_periodically(self):
+        """Verifica o status do bot periodicamente (a cada 10 segundos)"""
+        while True:
+            try:
+                response = requests.get(f"{API_ENDPOINT}/worker-config?config_id={CONFIG_ID}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    current_status = data.get('status', 'active')
+                    
+                    # Atualizar flag interno
+                    self.is_active = (current_status == 'active')
+                    
+                    # Logar mudanças de estado
+                    if current_status != self.last_status:
+                        if self.is_active:
+                            logger.info("▶️  Bot reativado - processamento retomado")
+                        else:
+                            logger.info("⏸️  Bot pausado - aguardando reativação...")
+                        self.last_status = current_status
+                        
+            except Exception as e:
+                logger.warning(f"⚠️  Erro ao verificar status: {e}")
+            
+            await asyncio.sleep(10)  # Verificar a cada 10 segundos
     
     async def start(self):
         """Inicia o worker"""
@@ -126,6 +154,10 @@ class TelegramWorker:
         # Salvar session string no banco após primeiro login
         await self.save_session_string()
         
+        # Iniciar verificação periódica de status em background
+        asyncio.create_task(self.check_status_periodically())
+        logger.info("🔄 Verificação periódica de status iniciada")
+        
         # Registrar event handler
         source_channel = int(self.config['source_channel_id'])
         
@@ -141,6 +173,11 @@ class TelegramWorker:
     
     async def handle_new_message(self, event):
         """Processa nova mensagem e replica"""
+        # Verificar se o bot está ativo
+        if not self.is_active:
+            logger.debug("⏸️  Mensagem ignorada - bot pausado")
+            return
+        
         message = event.message
         source_channel = event.chat_id
         

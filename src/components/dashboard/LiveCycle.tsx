@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { Radio, Zap, CheckCircle2 } from "lucide-react";
+import { Radio, Zap, CheckCircle2, Power } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 
 interface LiveCycleProps {
   configId: string;
@@ -17,24 +20,37 @@ interface LiveEvent {
 }
 
 export const LiveCycle = ({ configId }: LiveCycleProps) => {
+  const { toast } = useToast();
   const [replicating, setReplicating] = useState(false);
   const [lastEvent, setLastEvent] = useState<LiveEvent | null>(null);
   const [destinations, setDestinations] = useState<string[]>([]);
+  const [botStatus, setBotStatus] = useState<'active' | 'inactive'>('active');
+  const [loadingStatus, setLoadingStatus] = useState(false);
 
   useEffect(() => {
-    // Fetch destination channels
-    const fetchDestinations = async () => {
-      const { data } = await supabase
+    // Fetch destination channels and bot status
+    const fetchData = async () => {
+      const { data: destData } = await supabase
         .from("destination_channels")
         .select("channel_name")
         .eq("config_id", configId);
       
-      if (data) {
-        setDestinations(data.map(d => d.channel_name));
+      if (destData) {
+        setDestinations(destData.map(d => d.channel_name));
+      }
+
+      const { data: configData } = await supabase
+        .from("telegram_configs")
+        .select("status")
+        .eq("id", configId)
+        .single();
+      
+      if (configData) {
+        setBotStatus(configData.status as 'active' | 'inactive');
       }
     };
 
-    fetchDestinations();
+    fetchData();
 
     // Subscribe to realtime updates
     const channel = supabase
@@ -68,6 +84,36 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
     };
   }, [configId]);
 
+  const toggleBotStatus = async () => {
+    setLoadingStatus(true);
+    try {
+      const newStatus = botStatus === 'active' ? 'inactive' : 'active';
+      
+      const { error } = await supabase
+        .from("telegram_configs")
+        .update({ status: newStatus })
+        .eq("id", configId);
+
+      if (error) throw error;
+
+      setBotStatus(newStatus);
+      toast({
+        title: newStatus === 'active' ? "Bot ativado" : "Bot pausado",
+        description: newStatus === 'active' 
+          ? "O bot voltará a replicar mensagens." 
+          : "O bot está pausado. Mensagens não serão replicadas.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao alterar status",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingStatus(false);
+    }
+  };
+
   const getMessageTypeIcon = (type: string) => {
     switch (type) {
       case 'text': return '📝';
@@ -81,12 +127,32 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <Zap className="w-5 h-5 text-warning" />
-          <CardTitle>Live Cycle - Visualização em Tempo Real</CardTitle>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-warning" />
+            <CardTitle>Live Cycle - Visualização em Tempo Real</CardTitle>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={botStatus === 'active' ? 'default' : 'secondary'} className="gap-1">
+              <Power className="w-3 h-3" />
+              {botStatus === 'active' ? '🟢 Operacional' : '🔴 Pausado'}
+            </Badge>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {botStatus === 'active' ? 'Ativo' : 'Pausado'}
+              </span>
+              <Switch 
+                checked={botStatus === 'active'} 
+                onCheckedChange={toggleBotStatus}
+                disabled={loadingStatus}
+              />
+            </div>
+          </div>
         </div>
         <CardDescription>
-          Acompanhe a replicação de mensagens ao vivo
+          {botStatus === 'active' 
+            ? 'Acompanhe a replicação de mensagens ao vivo' 
+            : '⚠️ Bot em manutenção - mensagens não serão replicadas'}
         </CardDescription>
       </CardHeader>
 

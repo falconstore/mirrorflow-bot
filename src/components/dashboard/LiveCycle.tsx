@@ -24,7 +24,7 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
   const [replicating, setReplicating] = useState(false);
   const [lastEvent, setLastEvent] = useState<LiveEvent | null>(null);
   const [destinations, setDestinations] = useState<string[]>([]);
-  const [botStatus, setBotStatus] = useState<'active' | 'inactive'>('active');
+  const [botStatus, setBotStatus] = useState<'active' | 'paused'>('active');
   const [loadingStatus, setLoadingStatus] = useState(false);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
         .single();
       
       if (configData) {
-        setBotStatus(configData.status as 'active' | 'inactive');
+        setBotStatus(configData.status as 'active' | 'paused');
       }
     };
 
@@ -87,7 +87,7 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
   const toggleBotStatus = async () => {
     setLoadingStatus(true);
     try {
-      const newStatus = botStatus === 'active' ? 'inactive' : 'active';
+      const newStatus = botStatus === 'active' ? 'paused' : 'active';
       
       const { error } = await supabase
         .from("telegram_configs")

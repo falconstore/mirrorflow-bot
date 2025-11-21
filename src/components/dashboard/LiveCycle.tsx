@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { Radio, Zap, CheckCircle2, Power } from "lucide-react";
+import { Radio, Zap, CheckCircle2, Power, RotateCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface LiveCycleProps {
   configId: string;
@@ -26,6 +29,10 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
   const [destinations, setDestinations] = useState<string[]>([]);
   const [botStatus, setBotStatus] = useState<'active' | 'paused'>('active');
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [workerOnline, setWorkerOnline] = useState(false);
+  const [lastHeartbeat, setLastHeartbeat] = useState<string | null>(null);
+  const [lastRestart, setLastRestart] = useState<string | null>(null);
+  const [restartRequested, setRestartRequested] = useState(false);
 
   useEffect(() => {
     // Fetch destination channels and bot status
@@ -41,16 +48,32 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
 
       const { data: configData } = await supabase
         .from("telegram_configs")
-        .select("status")
+        .select("status, worker_last_heartbeat, last_restart_at, restart_requested")
         .eq("id", configId)
         .single();
       
       if (configData) {
         setBotStatus(configData.status as 'active' | 'paused');
+        setLastHeartbeat(configData.worker_last_heartbeat);
+        setLastRestart(configData.last_restart_at);
+        setRestartRequested(configData.restart_requested || false);
+        
+        // Check if worker is online (heartbeat within last 60 seconds)
+        if (configData.worker_last_heartbeat) {
+          const lastBeat = new Date(configData.worker_last_heartbeat);
+          const now = new Date();
+          const diffSeconds = (now.getTime() - lastBeat.getTime()) / 1000;
+          setWorkerOnline(diffSeconds < 60);
+        }
       }
     };
 
     fetchData();
+
+    // Check worker health every 10 seconds
+    const healthCheck = setInterval(() => {
+      fetchData();
+    }, 10000);
 
     // Subscribe to realtime updates
     const channel = supabase
@@ -80,6 +103,7 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
       .subscribe();
 
     return () => {
+      clearInterval(healthCheck);
       supabase.removeChannel(channel);
     };
   }, [configId]);
@@ -114,6 +138,38 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
     }
   };
 
+  const requestRestart = async () => {
+    if (restartRequested) {
+      toast({
+        title: "Reinício já solicitado",
+        description: "Aguarde o worker processar o restart anterior.",
+        variant: "default",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("telegram_configs")
+        .update({ restart_requested: true })
+        .eq("id", configId);
+
+      if (error) throw error;
+
+      setRestartRequested(true);
+      toast({
+        title: "🔄 Reiniciando worker...",
+        description: "O worker será reiniciado em alguns segundos.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao solicitar restart",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const getMessageTypeIcon = (type: string) => {
     switch (type) {
       case 'text': return '📝';
@@ -133,10 +189,24 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
             <CardTitle>Live Cycle - Visualização em Tempo Real</CardTitle>
           </div>
           <div className="flex items-center gap-3">
+            <Badge variant={workerOnline ? 'default' : 'destructive'} className="gap-1">
+              <div className={cn("w-2 h-2 rounded-full", workerOnline ? "bg-green-500 animate-pulse" : "bg-red-500")} />
+              {workerOnline ? 'Worker Online' : 'Worker Offline'}
+            </Badge>
             <Badge variant={botStatus === 'active' ? 'default' : 'secondary'} className="gap-1">
               <Power className="w-3 h-3" />
-              {botStatus === 'active' ? '🟢 Operacional' : '🔴 Pausado'}
+              {botStatus === 'active' ? 'Operacional' : 'Pausado'}
             </Badge>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={requestRestart}
+              disabled={restartRequested || !workerOnline}
+              className="gap-2"
+            >
+              <RotateCw className={cn("w-4 h-4", restartRequested && "animate-spin")} />
+              Reiniciar Worker
+            </Button>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
                 {botStatus === 'active' ? 'Ativo' : 'Pausado'}
@@ -217,11 +287,25 @@ export const LiveCycle = ({ configId }: LiveCycleProps) => {
           </div>
         </div>
 
-        {lastEvent && (
-          <div className="mt-6 pt-6 border-t border-border text-center text-sm text-muted-foreground">
-            Última replicação: {new Date(lastEvent.timestamp).toLocaleString('pt-BR')}
+        <div className="mt-6 pt-6 border-t border-border space-y-2">
+          {lastEvent && (
+            <div className="text-center text-sm text-muted-foreground">
+              Última replicação: {new Date(lastEvent.timestamp).toLocaleString('pt-BR')}
+            </div>
+          )}
+          <div className="flex justify-center gap-6 text-xs text-muted-foreground">
+            {lastHeartbeat && (
+              <div>
+                Última conexão: {formatDistanceToNow(new Date(lastHeartbeat), { addSuffix: true, locale: ptBR })}
+              </div>
+            )}
+            {lastRestart && (
+              <div>
+                Último restart: {formatDistanceToNow(new Date(lastRestart), { addSuffix: true, locale: ptBR })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   );

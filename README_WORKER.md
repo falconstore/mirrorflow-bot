@@ -1,10 +1,27 @@
 # Message Mirroring - Python Worker
 
+⚡ **Versão 2.0** - Agora com controle remoto completo!
+
 ## 📋 Requisitos
 
 - Python 3.8 ou superior
 - macOS (ou qualquer sistema Unix)
 - Conta do Telegram configurada
+
+## 🆕 Novidades da Versão 2.0
+
+### Controle Remoto
+- ✅ **Ativar/Pausar remotamente** - Controle o bot direto do dashboard
+- 🔄 **Reiniciar remotamente** - Reinicie o worker sem acesso SSH
+- 💓 **Heartbeat automático** - Sistema detecta se o worker está online
+- 📊 **Métricas avançadas** - Analytics detalhados de performance
+
+### Como Funciona
+O worker agora verifica o status a cada 5 segundos e:
+- Respeita o botão de ativar/pausar no dashboard
+- Executa restart quando solicitado
+- Envia heartbeat a cada 30 segundos
+- Reporta métricas de performance
 
 ## 🚀 Instalação
 
@@ -81,6 +98,41 @@ O worker mostra logs detalhados:
 - ❌ Erros durante a replicação
 - 📨 Tipos de mensagem detectados
 - 📊 Status de cada envio
+- 💓 Heartbeat (a cada 30 segundos)
+- 🔄 Reinícios remotos
+- ▶️/⏸️ Mudanças de status
+
+### Novos Logs da Versão 2.0
+```
+💓 Heartbeat enviado
+🔄 Reinício solicitado remotamente...
+📡 Desconectando do Telegram...
+⚙️  Recarregando configuração...
+🔌 Reconectando ao Telegram...
+✅ Worker reiniciado com sucesso!
+▶️  Bot reativado - processamento retomado
+⏸️  Bot pausado - aguardando reativação...
+```
+
+## 🎮 Controle Remoto
+
+### Ativar/Pausar o Bot
+1. Acesse o Dashboard
+2. Use o switch "Ativo/Pausado" no card Live Cycle
+3. O worker responderá em até 5 segundos
+
+### Reiniciar o Worker
+1. Clique no botão "🔄 Reiniciar Worker"
+2. O worker irá:
+   - Desconectar do Telegram
+   - Recarregar a configuração
+   - Reconectar automaticamente
+3. Processo leva ~5-10 segundos
+
+### Monitorar Status
+- **Worker Online/Offline**: Mostra se o worker está conectado
+- **Última conexão**: Tempo desde o último heartbeat
+- **Último restart**: Quando foi reiniciado pela última vez
 
 ## 🔧 Solução de Problemas
 
@@ -96,6 +148,23 @@ O worker mostra logs detalhados:
 - Verifique se o worker está rodando: `ps aux | grep telegram_worker`
 - Confira os logs para erros
 - Confirme que sua conta é admin/membro de todos os canais
+- **NOVO**: Verifique se o bot está ativo no dashboard (não pausado)
+
+### Worker aparece como Offline
+- Verifique se o processo está rodando
+- Confira os logs para erros de conexão
+- O worker pode estar travado - use o botão de Reiniciar
+- Se persistir, mate o processo e inicie novamente
+
+### Botão de Pausar não funciona
+- Aguarde até 5 segundos (intervalo de verificação)
+- Verifique os logs do worker para confirmação
+- O worker deve mostrar: "⏸️ Bot pausado - aguardando reativação..."
+
+### Reiniciar não funciona
+- Certifique-se que o worker está online primeiro
+- Aguarde até 10 segundos para o restart completar
+- Se travar, mate o processo manualmente e reinicie
 
 ## 📝 Estrutura de Arquivos
 
@@ -113,6 +182,25 @@ O worker mostra logs detalhados:
 - **NUNCA** compartilhe seu arquivo `.env`
 - O arquivo `session_name.session` contém credenciais sensíveis
 - Mantenha backups do `.env` e `session_name.session`
+
+## ⚠️ IMPORTANTE: Atualização para Versão 2.0
+
+Se você já está usando o worker antigo:
+
+1. **Faça backup** dos seus arquivos `.env` e `session_name.session`
+2. **Substitua** o arquivo `telegram_worker.py` pela nova versão
+3. **Reinicie** o worker:
+   ```bash
+   pkill -f telegram_worker.py
+   python3 telegram_worker.py
+   ```
+4. Verifique no dashboard se o worker aparece como "Online"
+
+### O que muda?
+- ✅ Agora você pode controlar tudo pelo dashboard
+- ✅ Não precisa mais SSH para pausar/reiniciar
+- ✅ Sistema de heartbeat detecta se está offline
+- ✅ Métricas de performance automáticas
 
 ## 🆘 Suporte
 

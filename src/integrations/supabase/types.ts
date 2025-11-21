@@ -49,6 +49,47 @@ export type Database = {
           },
         ]
       }
+      hourly_metrics: {
+        Row: {
+          avg_latency_seconds: number | null
+          config_id: string
+          created_at: string | null
+          failed_messages: number | null
+          hour: string
+          id: string
+          successful_messages: number | null
+          total_messages: number | null
+        }
+        Insert: {
+          avg_latency_seconds?: number | null
+          config_id: string
+          created_at?: string | null
+          failed_messages?: number | null
+          hour: string
+          id?: string
+          successful_messages?: number | null
+          total_messages?: number | null
+        }
+        Update: {
+          avg_latency_seconds?: number | null
+          config_id?: string
+          created_at?: string | null
+          failed_messages?: number | null
+          hour?: string
+          id?: string
+          successful_messages?: number | null
+          total_messages?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hourly_metrics_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       replication_logs: {
         Row: {
           config_id: string
@@ -135,11 +176,14 @@ export type Database = {
           created_at: string
           delay_seconds: number
           id: string
+          last_restart_at: string | null
           phone_number: string
+          restart_requested: boolean | null
           session_string: string | null
           status: string
           updated_at: string
           user_id: string
+          worker_last_heartbeat: string | null
         }
         Insert: {
           api_hash: string
@@ -147,11 +191,14 @@ export type Database = {
           created_at?: string
           delay_seconds?: number
           id?: string
+          last_restart_at?: string | null
           phone_number: string
+          restart_requested?: boolean | null
           session_string?: string | null
           status?: string
           updated_at?: string
           user_id: string
+          worker_last_heartbeat?: string | null
         }
         Update: {
           api_hash?: string
@@ -159,13 +206,51 @@ export type Database = {
           created_at?: string
           delay_seconds?: number
           id?: string
+          last_restart_at?: string | null
           phone_number?: string
+          restart_requested?: boolean | null
           session_string?: string | null
           status?: string
           updated_at?: string
           user_id?: string
+          worker_last_heartbeat?: string | null
         }
         Relationships: []
+      }
+      worker_status_history: {
+        Row: {
+          changed_at: string | null
+          changed_by: string | null
+          config_id: string
+          id: string
+          notes: string | null
+          status: string
+        }
+        Insert: {
+          changed_at?: string | null
+          changed_by?: string | null
+          config_id: string
+          id?: string
+          notes?: string | null
+          status: string
+        }
+        Update: {
+          changed_at?: string | null
+          changed_by?: string | null
+          config_id?: string
+          id?: string
+          notes?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_status_history_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_configs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

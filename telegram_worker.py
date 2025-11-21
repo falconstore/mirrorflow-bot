@@ -65,7 +65,16 @@ class TelegramWorker:
             response = requests.get(f"{API_ENDPOINT}/worker-config?config_id={CONFIG_ID}")
             response.raise_for_status()
             self.config = response.json()
+            
+            # Atualizar status inicial
+            current_status = self.config.get('status', 'active')
+            self.is_active = (current_status == 'active')
+            self.last_status = current_status
+            
+            status_emoji = "▶️" if self.is_active else "⏸️"
             logger.info(f"✅ Configuração carregada: {len(self.config['destination_channels'])} canais de destino")
+            logger.info(f"{status_emoji} Status inicial: {current_status}")
+            
             return True
         except Exception as e:
             logger.error(f"❌ Erro ao buscar configuração: {e}")
@@ -109,8 +118,8 @@ class TelegramWorker:
             logger.error(f"❌ Erro ao salvar session string: {e}")
 
     async def check_status_periodically(self):
-        """Verifica o status do bot periodicamente (a cada 10 segundos)"""
-        while True:
+        """Verifica o status do bot periodicamente (a cada 5 segundos)"""
+        while self.is_running:
             try:
                 response = requests.get(f"{API_ENDPOINT}/worker-config?config_id={CONFIG_ID}")
                 
@@ -119,20 +128,22 @@ class TelegramWorker:
                     current_status = data.get('status', 'active')
                     
                     # Atualizar flag interno
-                    self.is_active = (current_status == 'active')
+                    new_is_active = (current_status == 'active')
                     
                     # Logar mudanças de estado
                     if current_status != self.last_status:
-                        if self.is_active:
+                        if new_is_active:
                             logger.info("▶️  Bot reativado - processamento retomado")
                         else:
                             logger.info("⏸️  Bot pausado - aguardando reativação...")
                         self.last_status = current_status
+                    
+                    self.is_active = new_is_active
                         
             except Exception as e:
                 logger.warning(f"⚠️  Erro ao verificar status: {e}")
             
-            await asyncio.sleep(10)  # Verificar a cada 10 segundos
+            await asyncio.sleep(5)  # Verificar a cada 5 segundos
     
     async def start(self):
         """Inicia o worker"""
